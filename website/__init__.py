@@ -17,10 +17,26 @@ def create_app():
     app.config['PERMANENT_SESSION_LIFETIME'] = 3600
 
     # Database configuration - use environment variables for production
-    app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
-    app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'root')
-    app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', '1234')
-    app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'abilityhire')
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url:
+        # Parse DATABASE_URL for external MySQL (e.g., PlanetScale)
+        # Expected format: mysql+pymysql://USER:PASS@HOST:PORT/DB?ssl=true
+        import urllib.parse
+        parsed = urllib.parse.urlparse(database_url)
+        app.config['MYSQL_HOST'] = parsed.hostname
+        app.config['MYSQL_USER'] = parsed.username
+        app.config['MYSQL_PASSWORD'] = parsed.password
+        app.config['MYSQL_DB'] = parsed.path.lstrip('/')
+        app.config['MYSQL_PORT'] = parsed.port or 3306
+        # Enable SSL if specified
+        if 'ssl=true' in database_url:
+            app.config['MYSQL_SSL'] = {'ca': None, 'cert': None, 'key': None}
+    else:
+        # Local development fallback
+        app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
+        app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'root')
+        app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', '1234')
+        app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'abilityhire')
 
     # Babel configuration
     app.config['BABEL_DEFAULT_LOCALE'] = 'en'
@@ -47,5 +63,10 @@ def create_app():
 
     app.register_blueprint(auth)
     app.register_blueprint(views)
+
+    # Add health check endpoint
+    @app.route('/health')
+    def health():
+        return {'status': 'ok'}, 200
 
     return app
